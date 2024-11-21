@@ -6,34 +6,53 @@ use burn::{
     prelude::*,
 };
 
-// CIFAR-10 mean and std values
-const MEAN: [f32; 3] = [0.4914, 0.48216, 0.44653];
-const STD: [f32; 3] = [0.24703, 0.24349, 0.26159];
-
-/// Normalizer for the CIFAR-10 dataset.
 #[derive(Clone)]
 pub struct Normalizer<B: Backend> {
     pub mean: Tensor<B, 4>,
     pub std: Tensor<B, 4>,
 }
 
-// TODO: crop and normalize width / height of laptop photos?
-
 impl<B: Backend> Normalizer<B> {
-    /// Creates a new normalizer.
-    pub fn new(device: &Device<B>) -> Self {
-        let mean = Tensor::<B, 1>::from_floats(MEAN, device).reshape([1, 3, 1, 1]);
-        let std = Tensor::<B, 1>::from_floats(STD, device).reshape([1, 3, 1, 1]);
+    /// Creates a new normalizer by computing statistics from the dataset tensor
+    /// Expects input tensor of shape [batch_size, channels, height, width]
+    pub fn from_dataset(images: &Tensor<B, 4>, device: &Device<B>) -> Self {
+        let dims = images.dims();
+        let n_images = dims[0] as f32;
+        let n_pixels = (dims[2] * dims[3]) as f32;
+
+        // Calculate mean per channel
+        let means = images
+            .clone()
+            .sum_dim(0) // Sum over batch
+            .sum_dim(1) // Sum over height
+            .sum_dim(1) // Sum over width
+            .clone()
+            / (n_images * n_pixels);
+
+        // Calculate squared values and their mean
+        let squared = images.clone() * images.clone(); // Element-wise multiplication instead of powf
+        let squared_means =
+            squared.sum_dim(0).sum_dim(1).sum_dim(1).clone() / (n_images * n_pixels);
+
+        // Calculate std: sqrt(E[X²] - E[X]²)
+        let variances = squared_means - (means.clone() * means.clone());
+        let stds = variances.sqrt();
+
+        // Reshape to [1, C, 1, 1] for broadcasting
+        let mean = means.reshape([1, 3, 1, 1]);
+        let std = stds.reshape([1, 3, 1, 1]);
+
         Self { mean, std }
     }
 
-    /// Normalizes the input image according to the CIFAR-10 dataset.
-    ///
-    /// The input image should be in the range [0, 1].
-    /// The output image will be in the range [-1, 1].
-    ///
-    /// The normalization is done according to the following formula:
-    /// `input = (input - mean) / std`
+    /// Alternative constructor with custom mean and std values
+    pub fn with_values(mean: [f32; 3], std: [f32; 3], device: &Device<B>) -> Self {
+        let mean = Tensor::<B, 1>::from_floats(mean, device).reshape([1, 3, 1, 1]);
+        let std = Tensor::<B, 1>::from_floats(std, device).reshape([1, 3, 1, 1]);
+        Self { mean, std }
+    }
+
+    /// Normalizes the input image.
     pub fn normalize(&self, input: Tensor<B, 4>) -> Tensor<B, 4> {
         (input - self.mean.clone()) / self.std.clone()
     }
@@ -41,7 +60,7 @@ impl<B: Backend> Normalizer<B> {
 
 #[derive(Clone)]
 pub struct ClassificationBatcher<B: Backend> {
-    normalizer: Normalizer<B>,
+    // normalizer: Normalizer<B>,
     device: B::Device,
 }
 
@@ -54,7 +73,7 @@ pub struct ClassificationBatch<B: Backend> {
 impl<B: Backend> ClassificationBatcher<B> {
     pub fn new(device: B::Device) -> Self {
         Self {
-            normalizer: Normalizer::<B>::new(&device),
+            // normalizer: Normalizer::<B>::new(&device),
             device,
         }
     }
@@ -117,10 +136,11 @@ impl<B: Backend> Batcher<ImageDatasetItem, ClassificationBatch<B>> for Classific
             .map(|tensor| tensor / 255) // normalize between [0, 1]
             .collect();
 
-        let images = Tensor::stack(images, 0);
+        let images: Tensor<B, 4> = Tensor::stack(images, 0);
         let targets = Tensor::cat(targets, 0);
 
-        let images = self.normalizer.normalize(images);
+        let normalizer = Normalizer::from_dataset(&images, &self.device);
+        let images = normalizer.normalize(images);
 
         ClassificationBatch { images, targets }
     }
