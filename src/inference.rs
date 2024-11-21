@@ -1,35 +1,4 @@
-// use burn::{
-//     data::{
-//         dataloader::batcher::Batcher,
-//         dataset::vision::{Annotation, ImageDatasetItem},
-//     },
-//     module::Module,
-//     record::{CompactRecorder, Recorder},
-//     tensor::backend::Backend,
-// };
-
-// use crate::{data::ClassificationBatcher, model::LaptopClassifier};
-
 const NUM_CLASSES: u8 = 2;
-
-// pub fn infer<B: Backend>(artifact_dir: &str, device: B::Device, item: ImageDatasetItem) {
-//     let record = CompactRecorder::new()
-//         .load(format!("{artifact_dir}/model").into(), &device)
-//         .expect("Trained model should exist");
-
-//     let model: LaptopClassifier<B> =
-//         LaptopClassifier::new(NUM_CLASSES.into(), &device).load_record(record);
-
-//     let mut label = 0;
-//     if let Annotation::Label(category) = item.annotation {
-//         label = category;
-//     };
-//     let batcher = ClassificationBatcher::new(device);
-//     let batch = batcher.batch(vec![item]);
-//     let output = model.forward(batch.images);
-//     let predicted = output.argmax(1).flatten::<1>(0, 1).into_scalar();
-//     println!("Predicted {} Expected {:?}", predicted, label);
-// }
 
 use burn::{
     module::Module,
@@ -59,25 +28,6 @@ pub fn infer_from_file<B: Backend>(artifact_dir: &str, device: &B::Device, image
 
     // Convert to RGB if not already
     let img_rgb = img.to_rgb8();
-
-    // Convert to tensor [1, 3, 800, 800]
-    // let tensor_data: Vec<f32> = img_rgb
-    //     .pixels()
-    //     .flat_map(|p| {
-    //         [
-    //             p[0] as f32 / 255.0,
-    //             p[1] as f32 / 255.0,
-    //             p[2] as f32 / 255.0,
-    //         ]
-    //     })
-    //     .collect();
-
-    // println!("creat tensor data...");
-
-    // let tensor_data = TensorData::new(tensor_data, Shape::new([1, 3, 800, 800]));
-
-    // Create input tensor with correct shape
-    // let input = Tensor::from_data(tensor_data, device);
 
     // println!("forward... {:?}", input.shape());
     let tensor_data: Vec<f32> = img_rgb
@@ -110,78 +60,76 @@ pub fn infer_from_file<B: Backend>(artifact_dir: &str, device: &B::Device, image
     // Ok(predicted)
 }
 
-// Alternative version that also normalizes using the same normalizer as training
-pub fn infer_from_file_with_normalizer<B: Backend>(
-    artifact_dir: &str,
-    device: &B::Device,
-    image_path: &str,
-    normalizer: &Normalizer<B>,
-) {
-    let record = CompactRecorder::new()
-        .load(format!("{artifact_dir}/model").into(), device)
-        .expect("Trained model should exist");
+// pub fn infer_from_file<B: Backend>(artifact_dir: &str, device: &B::Device, image_path: &str) {
+//     // Load the model
+//     let record = CompactRecorder::new()
+//         .load(format!("{artifact_dir}/model").into(), device)
+//         .expect("Trained model should exist");
 
-    let model: LaptopClassifier<B> =
-        LaptopClassifier::new(NUM_CLASSES.into(), device).load_record(record);
+//     let model: LaptopClassifier<B> =
+//         LaptopClassifier::new(NUM_CLASSES.into(), device).load_record(record);
 
-    // Load and preprocess the image
-    let img = ImageReader::open(image_path)
-        .expect("Couldn't open image path")
-        .decode()
-        .expect("Couldn't decode image")
-        .resize_exact(800, 800, image::imageops::FilterType::Lanczos3);
+//     // First load all training images just to compute normalizer
+//     let train_path = Path::new("laptop_dataset_normal").join("train");
+//     let mut training_tensors = Vec::new();
 
-    let img_rgb = img.to_rgb8();
+//     for entry in std::fs::read_dir(train_path)
+//         .expect("Failed to read train directory")
+//         .filter_map(Result::ok)
+//         .filter(|e| e.path().extension().map_or(false, |ext| ext != "csv"))
+//     {
+//         let img = ImageReader::open(entry.path())
+//             .expect("Couldn't open image")
+//             .decode()
+//             .expect("Couldn't decode image")
+//             .resize_exact(32, 32, image::imageops::FilterType::Lanczos3)
+//             .to_rgb8();
 
-    // Convert to tensor
-    let tensor_data: Vec<f32> = img_rgb
-        .pixels()
-        .flat_map(|p| {
-            [
-                p[0] as f32 / 255.0,
-                p[1] as f32 / 255.0,
-                p[2] as f32 / 255.0,
-            ]
-        })
-        .collect();
+//         let tensor_data: Vec<f32> = img
+//             .pixels()
+//             .flat_map(|p| [p[0] as f32, p[1] as f32, p[2] as f32])
+//             .collect();
 
-    // let input = Tensor::from_vec(tensor_data, (1, 3, 800, 800), device);
+//         let tensor = TensorData::new(tensor_data, Shape::new([32, 32, 3]));
+//         let tensor = Tensor::<B, 3>::from_data(tensor.convert::<B::FloatElem>(), device)
+//             .swap_dims(2, 1)
+//             .swap_dims(1, 0);
 
-    let tensor_data = TensorData::new(tensor_data, Shape::new([1, 3, 800, 800]));
+//         training_tensors.push(tensor / 255.0);
+//     }
 
-    // Create input tensor with correct shape
-    let input = Tensor::from_data(tensor_data, device);
+//     let training_data: Tensor<B, 4> = Tensor::stack(training_tensors, 0);
+//     let normalizer = Normalizer::from_dataset(&training_data, device);
 
-    // Apply same normalization as training
-    let normalized_input = normalizer.normalize(input);
+//     // Now only process and infer on the single image
+//     let img = ImageReader::open(image_path)
+//         .expect("Couldn't open image path")
+//         .decode()
+//         .expect("Couldn't decode image")
+//         .resize_exact(32, 32, image::imageops::FilterType::Lanczos3)
+//         .to_rgb8();
 
-    // Run inference
-    let output = model.forward(normalized_input);
-    let predicted = output.argmax(1).flatten::<1>(0, 1).into_scalar();
+//     let tensor_data: Vec<f32> = img
+//         .pixels()
+//         .flat_map(|p| [p[0] as f32, p[1] as f32, p[2] as f32])
+//         .collect();
 
-    println!("Predicted class: {}", predicted);
-    // Ok(predicted)
-}
+//     let new_tensor = TensorData::new(tensor_data, Shape::new([32, 32, 3]));
+//     let new_data = Tensor::<B, 3>::from_data(new_tensor.convert::<B::FloatElem>(), device)
+//         .swap_dims(2, 1)
+//         .swap_dims(1, 0);
 
-// // Usage example in main or wherever:
-// fn main() -> Result<(), Box<dyn std::error::Error>> {
-//     let device = burn::backend::wgpu::Wgpu::default().device();
+//     let new_data = new_data / 255.0;
 
-//     // Basic usage
-//     let prediction = infer_from_file(
-//         "/tmp/custom-image-dataset",
-//         &device,
-//         "path/to/your/image.jpg"
-//     )?;
+//     let mut image_vec = Vec::new();
+//     image_vec.push(new_data);
 
-//     // Or with normalizer if you want to use the same normalization as training
-//     let normalizer = Normalizer::load_from_file("/path/to/saved/normalizer")?;
-//     let prediction = infer_from_file_with_normalizer(
-//         "/tmp/custom-image-dataset",
-//         &device,
-//         "path/to/your/image.jpg",
-//         &normalizer
-//     )?;
+//     // Only stack, normalize and forward the single inference image
+//     let single_image = Tensor::stack(image_vec, 0);
+//     let normalized_image = normalizer.normalize(single_image);
 
-//     Ok(())
+//     let output = model.forward(normalized_image);
+//     let predicted = output.argmax(1).flatten::<1>(0, 1).into_scalar();
+
+//     println!("Predicted class: {}", predicted);
 // }

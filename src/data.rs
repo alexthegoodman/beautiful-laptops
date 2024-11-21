@@ -109,7 +109,7 @@ pub struct ClassificationBatcher<B: Backend> {
 #[derive(Clone, Debug)]
 pub struct ClassificationBatch<B: Backend> {
     pub images: Tensor<B, 4>,
-    pub targets: Tensor<B, 2, Int>,
+    pub targets: Tensor<B, 1, Int>,
 }
 
 impl<B: Backend> ClassificationBatcher<B> {
@@ -135,9 +135,8 @@ impl<B: Backend> Batcher<ImageDatasetItem, ClassificationBatch<B>> for Classific
             .iter()
             .map(|item| {
                 if let Annotation::Label(y) = item.annotation {
-                    // Create a tensor with shape [1, 1] for each item
-                    Tensor::<B, 2, Int>::from_data(
-                        TensorData::new(vec![y as i32], Shape::new([1, 1])),
+                    Tensor::<B, 1, Int>::from_data(
+                        TensorData::new(vec![y as i32], Shape::new([1])),
                         &self.device,
                     )
                 } else {

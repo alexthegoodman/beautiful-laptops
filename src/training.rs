@@ -126,6 +126,22 @@ use burn::{
 const NUM_CLASSES: u8 = 2;
 const ARTIFACT_DIR: &str = "/tmp/custom-image-dataset";
 
+impl<B: Backend> LaptopClassifier<B> {
+    pub fn forward_classification(
+        &self,
+        images: Tensor<B, 4>,
+        targets: Tensor<B, 1, Int>,
+    ) -> ClassificationOutput<B> {
+        let output = self.forward(images);
+
+        let loss = CrossEntropyLossConfig::new()
+            .init(&output.device())
+            .forward(output.clone(), targets.clone());
+
+        ClassificationOutput::new(loss, output, targets)
+    }
+}
+
 // impl<B: Backend> LaptopClassifier<B> {
 //     pub fn forward_classification(
 //         &self,
@@ -133,19 +149,16 @@ const ARTIFACT_DIR: &str = "/tmp/custom-image-dataset";
 //         targets: Tensor<B, 2, Int>,
 //     ) -> MultiLabelClassificationOutput<B> {
 //         let output = self.forward(images);
-
 //         let dims = targets.dims();
 
-//         let targets_new = targets
-//             // .float()  // Convert from int to float
-//             .reshape([dims[0], 1]); // Ensure shape is [batch_size, 1]
+//         let targets_new = targets.reshape([dims[0], 1]);
 
 //         let output_device = output.device();
 
 //         let output_binary = if output.dims()[1] == 2 {
-//             // Take just the probability of class 1
-//             // output.slice([1..2])
-//             output.slice([(0, -1), (1, 2)])
+//             let batch_size = output.dims()[0] as i64;
+//             // Use explicit end value from dimensions
+//             output.slice([(0, batch_size), (1, 2)])
 //         } else {
 //             output
 //         };
@@ -158,52 +171,20 @@ const ARTIFACT_DIR: &str = "/tmp/custom-image-dataset";
 //     }
 // }
 
-impl<B: Backend> LaptopClassifier<B> {
-    pub fn forward_classification(
-        &self,
-        images: Tensor<B, 4>,
-        targets: Tensor<B, 2, Int>,
-    ) -> MultiLabelClassificationOutput<B> {
-        let output = self.forward(images);
-        let dims = targets.dims();
-
-        let targets_new = targets.reshape([dims[0], 1]);
-
-        let output_device = output.device();
-
-        let output_binary = if output.dims()[1] == 2 {
-            let batch_size = output.dims()[0] as i64;
-            // Use explicit end value from dimensions
-            output.slice([(0, batch_size), (1, 2)])
-        } else {
-            output
-        };
-
-        let loss = BinaryCrossEntropyLossConfig::new()
-            .init(&output_device)
-            .forward(output_binary.clone(), targets_new.clone());
-
-        MultiLabelClassificationOutput::new(loss, output_binary, targets_new)
-    }
-}
-
-impl<B: AutodiffBackend> TrainStep<ClassificationBatch<B>, MultiLabelClassificationOutput<B>>
+impl<B: AutodiffBackend> TrainStep<ClassificationBatch<B>, ClassificationOutput<B>>
     for LaptopClassifier<B>
 {
-    fn step(
-        &self,
-        batch: ClassificationBatch<B>,
-    ) -> TrainOutput<MultiLabelClassificationOutput<B>> {
+    fn step(&self, batch: ClassificationBatch<B>) -> TrainOutput<ClassificationOutput<B>> {
         let item = self.forward_classification(batch.images, batch.targets);
 
         TrainOutput::new(self, item.loss.backward(), item)
     }
 }
 
-impl<B: Backend> ValidStep<ClassificationBatch<B>, MultiLabelClassificationOutput<B>>
+impl<B: Backend> ValidStep<ClassificationBatch<B>, ClassificationOutput<B>>
     for LaptopClassifier<B>
 {
-    fn step(&self, batch: ClassificationBatch<B>) -> MultiLabelClassificationOutput<B> {
+    fn step(&self, batch: ClassificationBatch<B>) -> ClassificationOutput<B> {
         self.forward_classification(batch.images, batch.targets)
     }
 }
@@ -247,7 +228,7 @@ pub fn train<B: AutodiffBackend>(config: TrainingConfig, device: B::Device) {
         .batch_size(config.batch_size)
         .shuffle(config.seed)
         .num_workers(config.num_workers)
-        .build(ImageFolderDataset::laptop_train()); //  TODO: pass in dataset from local files
+        .build(ImageFolderDataset::laptop_train());
 
     let dataloader_test = DataLoaderBuilder::new(batcher_valid)
         .batch_size(config.batch_size)
