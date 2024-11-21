@@ -17,6 +17,7 @@ use burn::nn::{
 };
 use burn::optim::{Adam, AdamConfig, Optimizer};
 use burn::tensor::Tensor;
+use nn::loss::BinaryCrossEntropyLossConfig;
 
 // use crate::model::{create_optimizer, LaptopClassifier, TrainingConfig};
 
@@ -121,21 +122,27 @@ use burn::{
     },
 };
 
-const NUM_CLASSES: u8 = 10;
+const NUM_CLASSES: u8 = 2;
 const ARTIFACT_DIR: &str = "/tmp/custom-image-dataset";
 
 impl<B: Backend> LaptopClassifier<B> {
     pub fn forward_classification(
         &self,
         images: Tensor<B, 4>,
-        targets: Tensor<B, 1, Int>,
+        targets: Tensor<B, 2, Int>,
     ) -> ClassificationOutput<B> {
         let output = self.forward(images);
-        let loss = CrossEntropyLossConfig::new()
+        // let loss = CrossEntropyLossConfig::new()
+        //     .init(&output.device())
+        //     .forward(output.clone(), targets.clone());
+
+        let loss = BinaryCrossEntropyLossConfig::new()
             .init(&output.device())
             .forward(output.clone(), targets.clone());
 
-        ClassificationOutput::new(loss, output, targets)
+        let targets_flat = targets.flatten(0, 2); // This will give us rank 1 tensor
+
+        ClassificationOutput::new(loss, output, targets_flat)
     }
 }
 

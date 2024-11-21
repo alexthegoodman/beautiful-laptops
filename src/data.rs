@@ -48,7 +48,7 @@ pub struct ClassificationBatcher<B: Backend> {
 #[derive(Clone, Debug)]
 pub struct ClassificationBatch<B: Backend> {
     pub images: Tensor<B, 4>,
-    pub targets: Tensor<B, 1, Int>,
+    pub targets: Tensor<B, 2, Int>,
 }
 
 impl<B: Backend> ClassificationBatcher<B> {
@@ -70,13 +70,33 @@ impl<B: Backend> Batcher<ImageDatasetItem, ClassificationBatch<B>> for Classific
                 .collect::<Vec<u8>>()
         }
 
+        // Modified to create binary targets
+        // let targets = items
+        //     .iter()
+        //     .map(|item| {
+        //         if let Annotation::Label(y) = item.annotation {
+        //             // Create a 2-element tensor where:
+        //             // [1, 0] represents class 0
+        //             // [0, 1] represents class 1
+        //             let mut target_data = vec![0; 2];
+        //             target_data[y as usize] = 1;
+
+        //             Tensor::<B, 2, Int>::from_data(
+        //                 TensorData::new(target_data, Shape::new([2, 2])),
+        //                 &self.device,
+        //             )
+        //         } else {
+        //             panic!("Invalid target type")
+        //         }
+        //     })
+        //     .collect();
         let targets = items
             .iter()
             .map(|item| {
-                // Expect class label (int) as target
                 if let Annotation::Label(y) = item.annotation {
-                    Tensor::<B, 1, Int>::from_data(
-                        TensorData::from([(y as i64).elem::<B::IntElem>()]),
+                    // Create a tensor with shape [1, 1] for each item
+                    Tensor::<B, 2, Int>::from_data(
+                        TensorData::new(vec![y as i32], Shape::new([1, 1])),
                         &self.device,
                     )
                 } else {

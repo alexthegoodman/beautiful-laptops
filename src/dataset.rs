@@ -140,6 +140,9 @@ pub fn download_dataset(force: bool, limit: Option<usize>) -> PathBuf {
     return dataset_dir;
 }
 
+use std::fs::File;
+use std::io::{BufRead, BufReader};
+
 pub trait LaptopDatasetLoader {
     fn laptop_train() -> Self;
     fn laptop_val() -> Self;
@@ -147,13 +150,67 @@ pub trait LaptopDatasetLoader {
 
 impl LaptopDatasetLoader for ImageFolderDataset {
     fn laptop_train() -> Self {
-        let root = download_dataset(false, Some(100));
-        Self::new_classification(root.join("train")).unwrap()
+        let test_dir = Path::new(file!()).parent().unwrap().parent().unwrap();
+        let dataset_dir = test_dir.join("laptop_dataset");
+        let annotations_path = dataset_dir.join("train").join("annotations.csv");
+
+        let reader = BufReader::new(File::open(annotations_path).unwrap());
+        let mut items = Vec::new();
+
+        for (i, line) in reader.lines().enumerate() {
+            if i == 0 {
+                // skip header
+                continue;
+            }
+
+            let line = line.unwrap();
+            let parts: Vec<&str> = line.split(',').collect();
+
+            if parts.len() != 2 {
+                panic!("Invalid annotation format at line {}", i + 1);
+            }
+
+            let filename = parts[0];
+            let label = parts[1];
+
+            let file_path = dataset_dir.join("train").join(filename);
+            items.push((file_path, label.to_string()));
+        }
+
+        let classes = &["false", "true"];
+        Self::new_classification_with_items(items, classes).unwrap()
     }
 
     fn laptop_val() -> Self {
-        let root = download_dataset(false, Some(100));
-        Self::new_classification(root.join("val")).unwrap()
+        let test_dir = Path::new(file!()).parent().unwrap().parent().unwrap();
+        let dataset_dir = test_dir.join("laptop_dataset");
+        let annotations_path = dataset_dir.join("val").join("annotations.csv");
+
+        let reader = BufReader::new(File::open(annotations_path).unwrap());
+        let mut items = Vec::new();
+
+        for (i, line) in reader.lines().enumerate() {
+            if i == 0 {
+                // skip header
+                continue;
+            }
+
+            let line = line.unwrap();
+            let parts: Vec<&str> = line.split(',').collect();
+
+            if parts.len() != 2 {
+                panic!("Invalid annotation format at line {}", i + 1);
+            }
+
+            let filename = parts[0];
+            let label = parts[1];
+
+            let file_path = dataset_dir.join("val").join(filename);
+            items.push((file_path, label.to_string()));
+        }
+
+        let classes = &["false", "true"];
+        Self::new_classification_with_items(items, classes).unwrap()
     }
 }
 
