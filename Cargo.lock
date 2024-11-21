@@ -257,6 +257,8 @@ version = "0.1.0"
 dependencies = [
  "burn",
  "clap",
+ "image",
+ "rayon",
  "reqwest",
  "serde",
 ]
