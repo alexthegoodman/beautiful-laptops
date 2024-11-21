@@ -57,5 +57,6 @@ pub fn run() {
 
 fn main() {
     // wgpu::run();
+    println!("Intializing...");
     run();
 }

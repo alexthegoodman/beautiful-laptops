@@ -186,6 +186,7 @@ fn create_artifact_dir(artifact_dir: &str) {
 }
 
 pub fn train<B: AutodiffBackend>(config: TrainingConfig, device: B::Device) {
+    println!("Running train...");
     create_artifact_dir(ARTIFACT_DIR);
 
     config
@@ -197,8 +198,6 @@ pub fn train<B: AutodiffBackend>(config: TrainingConfig, device: B::Device) {
     // Dataloaders
     let batcher_train = ClassificationBatcher::<B>::new(device.clone());
     let batcher_valid = ClassificationBatcher::<B::InnerBackend>::new(device.clone());
-
-    // TODO: load up annotations as well, possibly separate processes
 
     let dataloader_train = DataLoaderBuilder::new(batcher_train)
         .batch_size(config.batch_size)
@@ -228,6 +227,7 @@ pub fn train<B: AutodiffBackend>(config: TrainingConfig, device: B::Device) {
         );
 
     // Training
+    println!("Running fit...");
     let now = Instant::now();
     let model_trained = learner.fit(dataloader_train, dataloader_test);
     let elapsed = now.elapsed().as_secs();

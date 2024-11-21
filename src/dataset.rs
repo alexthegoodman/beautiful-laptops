@@ -151,7 +151,7 @@ pub trait LaptopDatasetLoader {
 impl LaptopDatasetLoader for ImageFolderDataset {
     fn laptop_train() -> Self {
         let test_dir = Path::new(file!()).parent().unwrap().parent().unwrap();
-        let dataset_dir = test_dir.join("laptop_dataset");
+        let dataset_dir = test_dir.join("laptop_dataset_normal");
         let annotations_path = dataset_dir.join("train").join("annotations.csv");
 
         let reader = BufReader::new(File::open(annotations_path).unwrap());
@@ -183,7 +183,7 @@ impl LaptopDatasetLoader for ImageFolderDataset {
 
     fn laptop_val() -> Self {
         let test_dir = Path::new(file!()).parent().unwrap().parent().unwrap();
-        let dataset_dir = test_dir.join("laptop_dataset");
+        let dataset_dir = test_dir.join("laptop_dataset_normal");
         let annotations_path = dataset_dir.join("val").join("annotations.csv");
 
         let reader = BufReader::new(File::open(annotations_path).unwrap());
