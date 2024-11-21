@@ -17,6 +17,7 @@ use burn::nn::{
 };
 use burn::optim::{Adam, AdamConfig, Optimizer};
 use burn::tensor::Tensor;
+use burn::train::MultiLabelClassificationOutput;
 use nn::loss::BinaryCrossEntropyLossConfig;
 
 // use crate::model::{create_optimizer, LaptopClassifier, TrainingConfig};
@@ -125,41 +126,84 @@ use burn::{
 const NUM_CLASSES: u8 = 2;
 const ARTIFACT_DIR: &str = "/tmp/custom-image-dataset";
 
+// impl<B: Backend> LaptopClassifier<B> {
+//     pub fn forward_classification(
+//         &self,
+//         images: Tensor<B, 4>,
+//         targets: Tensor<B, 2, Int>,
+//     ) -> MultiLabelClassificationOutput<B> {
+//         let output = self.forward(images);
+
+//         let dims = targets.dims();
+
+//         let targets_new = targets
+//             // .float()  // Convert from int to float
+//             .reshape([dims[0], 1]); // Ensure shape is [batch_size, 1]
+
+//         let output_device = output.device();
+
+//         let output_binary = if output.dims()[1] == 2 {
+//             // Take just the probability of class 1
+//             // output.slice([1..2])
+//             output.slice([(0, -1), (1, 2)])
+//         } else {
+//             output
+//         };
+
+//         let loss = BinaryCrossEntropyLossConfig::new()
+//             .init(&output_device)
+//             .forward(output_binary.clone(), targets_new.clone());
+
+//         MultiLabelClassificationOutput::new(loss, output_binary, targets_new)
+//     }
+// }
+
 impl<B: Backend> LaptopClassifier<B> {
     pub fn forward_classification(
         &self,
         images: Tensor<B, 4>,
         targets: Tensor<B, 2, Int>,
-    ) -> ClassificationOutput<B> {
+    ) -> MultiLabelClassificationOutput<B> {
         let output = self.forward(images);
-        // let loss = CrossEntropyLossConfig::new()
-        //     .init(&output.device())
-        //     .forward(output.clone(), targets.clone());
+        let dims = targets.dims();
+
+        let targets_new = targets.reshape([dims[0], 1]);
+
+        let output_device = output.device();
+
+        let output_binary = if output.dims()[1] == 2 {
+            let batch_size = output.dims()[0] as i64;
+            // Use explicit end value from dimensions
+            output.slice([(0, batch_size), (1, 2)])
+        } else {
+            output
+        };
 
         let loss = BinaryCrossEntropyLossConfig::new()
-            .init(&output.device())
-            .forward(output.clone(), targets.clone());
+            .init(&output_device)
+            .forward(output_binary.clone(), targets_new.clone());
 
-        let targets_flat = targets.flatten(0, 2); // This will give us rank 1 tensor
-
-        ClassificationOutput::new(loss, output, targets_flat)
+        MultiLabelClassificationOutput::new(loss, output_binary, targets_new)
     }
 }
 
-impl<B: AutodiffBackend> TrainStep<ClassificationBatch<B>, ClassificationOutput<B>>
+impl<B: AutodiffBackend> TrainStep<ClassificationBatch<B>, MultiLabelClassificationOutput<B>>
     for LaptopClassifier<B>
 {
-    fn step(&self, batch: ClassificationBatch<B>) -> TrainOutput<ClassificationOutput<B>> {
+    fn step(
+        &self,
+        batch: ClassificationBatch<B>,
+    ) -> TrainOutput<MultiLabelClassificationOutput<B>> {
         let item = self.forward_classification(batch.images, batch.targets);
 
         TrainOutput::new(self, item.loss.backward(), item)
     }
 }
 
-impl<B: Backend> ValidStep<ClassificationBatch<B>, ClassificationOutput<B>>
+impl<B: Backend> ValidStep<ClassificationBatch<B>, MultiLabelClassificationOutput<B>>
     for LaptopClassifier<B>
 {
-    fn step(&self, batch: ClassificationBatch<B>) -> ClassificationOutput<B> {
+    fn step(&self, batch: ClassificationBatch<B>) -> MultiLabelClassificationOutput<B> {
         self.forward_classification(batch.images, batch.targets)
     }
 }
@@ -212,8 +256,8 @@ pub fn train<B: AutodiffBackend>(config: TrainingConfig, device: B::Device) {
 
     // Learner config
     let learner = LearnerBuilder::new(ARTIFACT_DIR)
-        .metric_train_numeric(AccuracyMetric::new())
-        .metric_valid_numeric(AccuracyMetric::new())
+        // .metric_train_numeric(AccuracyMetric::new())
+        // .metric_valid_numeric(AccuracyMetric::new())
         .metric_train_numeric(LossMetric::new())
         .metric_valid_numeric(LossMetric::new())
         .with_file_checkpointer(CompactRecorder::new())

@@ -173,7 +173,7 @@ impl LaptopDatasetLoader for ImageFolderDataset {
             let filename = parts[0];
             let label = parts[1];
 
-            let file_path = dataset_dir.join("train").join(filename);
+            let file_path = dataset_dir.join(filename);
             items.push((file_path, label.to_string()));
         }
 
@@ -205,7 +205,7 @@ impl LaptopDatasetLoader for ImageFolderDataset {
             let filename = parts[0];
             let label = parts[1];
 
-            let file_path = dataset_dir.join("val").join(filename);
+            let file_path = dataset_dir.join(filename);
             items.push((file_path, label.to_string()));
         }
 

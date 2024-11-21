@@ -135,41 +135,103 @@ pub struct LaptopClassifier<B: Backend> {
     pool: MaxPool2d,
     conv1: Conv2d<B>,
     conv2: Conv2d<B>,
-    // conv3: Conv2d<B>,
-    // conv4: Conv2d<B>,
-    // conv5: Conv2d<B>,
-    // conv6: Conv2d<B>,
+    conv3: Conv2d<B>,
+    conv4: Conv2d<B>,
+    conv5: Conv2d<B>,
+    conv6: Conv2d<B>,
     fc1: Linear<B>,
     fc2: Linear<B>,
 }
 
 impl<B: Backend> LaptopClassifier<B> {
+    // pub fn new(num_classes: usize, device: &Device<B>) -> Self {
+    //     let conv1 = Conv2dConfig::new([3, 32], [3, 3])
+    //         .with_padding(PaddingConfig2d::Same)
+    //         .init(device);
+    //     let conv2 = Conv2dConfig::new([32, 32], [3, 3])
+    //         .with_padding(PaddingConfig2d::Same)
+    //         .init(device);
+
+    //     // let conv3 = Conv2dConfig::new([32, 64], [3, 3])
+    //     //     .with_padding(PaddingConfig2d::Same)
+    //     //     .init(device);
+    //     // let conv4 = Conv2dConfig::new([64, 64], [3, 3])
+    //     //     .with_padding(PaddingConfig2d::Same)
+    //     //     .init(device);
+
+    //     // let conv5 = Conv2dConfig::new([64, 128], [3, 3])
+    //     //     .with_padding(PaddingConfig2d::Same)
+    //     //     .init(device);
+    //     // let conv6 = Conv2dConfig::new([128, 128], [3, 3])
+    //     //     .with_padding(PaddingConfig2d::Same)
+    //     //     .init(device);
+
+    //     let pool = MaxPool2dConfig::new([2, 2]).with_strides([2, 2]).init();
+
+    //     // TODO: adjust input and output sizes?
+
+    //     let fc1 = LinearConfig::new(2048, 128).init(device);
+    //     let fc2 = LinearConfig::new(128, num_classes).init(device);
+
+    //     let dropout = DropoutConfig::new(0.3).init();
+
+    //     Self {
+    //         relu: Relu::new(),
+    //         dropout,
+    //         pool,
+    //         conv1,
+    //         conv2,
+    //         // conv3,
+    //         // conv4,
+    //         // conv5,
+    //         // conv6,
+    //         fc1,
+    //         fc2,
+    //     }
+    // }
+
     pub fn new(num_classes: usize, device: &Device<B>) -> Self {
+        // Starting with 800x800x3 input
+
+        // Conv1: 800x800x3 -> 800x800x32 (same padding)
         let conv1 = Conv2dConfig::new([3, 32], [3, 3])
             .with_padding(PaddingConfig2d::Same)
             .init(device);
+        // After Pool: 400x400x32
+
+        // Conv2: 400x400x32 -> 400x400x32
         let conv2 = Conv2dConfig::new([32, 32], [3, 3])
             .with_padding(PaddingConfig2d::Same)
             .init(device);
+        // After Pool: 200x200x32
 
-        // let conv3 = Conv2dConfig::new([32, 64], [3, 3])
-        //     .with_padding(PaddingConfig2d::Same)
-        //     .init(device);
-        // let conv4 = Conv2dConfig::new([64, 64], [3, 3])
-        //     .with_padding(PaddingConfig2d::Same)
-        //     .init(device);
+        // Conv3: 200x200x32 -> 200x200x64
+        let conv3 = Conv2dConfig::new([32, 64], [3, 3])
+            .with_padding(PaddingConfig2d::Same)
+            .init(device);
+        // After Pool: 100x100x64
 
-        // let conv5 = Conv2dConfig::new([64, 128], [3, 3])
-        //     .with_padding(PaddingConfig2d::Same)
-        //     .init(device);
-        // let conv6 = Conv2dConfig::new([128, 128], [3, 3])
-        //     .with_padding(PaddingConfig2d::Same)
-        //     .init(device);
+        // Conv4: 100x100x64 -> 100x100x64
+        let conv4 = Conv2dConfig::new([64, 64], [3, 3])
+            .with_padding(PaddingConfig2d::Same)
+            .init(device);
+        // After Pool: 50x50x64
+
+        // Conv5: 50x50x64 -> 50x50x128
+        let conv5 = Conv2dConfig::new([64, 128], [3, 3])
+            .with_padding(PaddingConfig2d::Same)
+            .init(device);
+        // After Pool: 25x25x128
+
+        // Conv6: 25x25x128 -> 25x25x128
+        let conv6 = Conv2dConfig::new([128, 128], [3, 3])
+            .with_padding(PaddingConfig2d::Same)
+            .init(device);
+        // After Pool: 13x13x128 = 21,632 features
 
         let pool = MaxPool2dConfig::new([2, 2]).with_strides([2, 2]).init();
 
-        // TODO: adjust input and output sizes?
-
+        // Final flattened size after all conv and pool layers: 13 * 13 * 128 = 21,632
         let fc1 = LinearConfig::new(2048, 128).init(device);
         let fc2 = LinearConfig::new(128, num_classes).init(device);
 
@@ -181,10 +243,10 @@ impl<B: Backend> LaptopClassifier<B> {
             pool,
             conv1,
             conv2,
-            // conv3,
-            // conv4,
-            // conv5,
-            // conv6,
+            conv3,
+            conv4,
+            conv5,
+            conv6,
             fc1,
             fc2,
         }
@@ -198,19 +260,19 @@ impl<B: Backend> LaptopClassifier<B> {
         let x = self.pool.forward(x);
         let x = self.dropout.forward(x);
 
-        // let x = self.conv3.forward(x);
-        // let x = self.activation.forward(x);
-        // let x = self.conv4.forward(x);
-        // let x = self.activation.forward(x);
-        // let x = self.pool.forward(x);
-        // let x = self.dropout.forward(x);
+        let x = self.conv3.forward(x);
+        let x = self.relu.forward(x);
+        let x = self.conv4.forward(x);
+        let x = self.relu.forward(x);
+        let x = self.pool.forward(x);
+        let x = self.dropout.forward(x);
 
-        // let x = self.conv5.forward(x);
-        // let x = self.activation.forward(x);
-        // let x = self.conv6.forward(x);
-        // let x = self.activation.forward(x);
-        // let x = self.pool.forward(x);
-        // let x = self.dropout.forward(x);
+        let x = self.conv5.forward(x);
+        let x = self.relu.forward(x);
+        let x = self.conv6.forward(x);
+        let x = self.relu.forward(x);
+        let x = self.pool.forward(x);
+        let x = self.dropout.forward(x);
 
         let x = x.flatten(1, 3);
 
