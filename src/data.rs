@@ -131,26 +131,6 @@ impl<B: Backend> Batcher<ImageDatasetItem, ClassificationBatch<B>> for Classific
                 .collect::<Vec<u8>>()
         }
 
-        // Modified to create binary targets
-        // let targets = items
-        //     .iter()
-        //     .map(|item| {
-        //         if let Annotation::Label(y) = item.annotation {
-        //             // Create a 2-element tensor where:
-        //             // [1, 0] represents class 0
-        //             // [0, 1] represents class 1
-        //             let mut target_data = vec![0; 2];
-        //             target_data[y as usize] = 1;
-
-        //             Tensor::<B, 2, Int>::from_data(
-        //                 TensorData::new(target_data, Shape::new([2, 2])),
-        //                 &self.device,
-        //             )
-        //         } else {
-        //             panic!("Invalid target type")
-        //         }
-        //     })
-        //     .collect();
         let targets = items
             .iter()
             .map(|item| {
@@ -168,6 +148,7 @@ impl<B: Backend> Batcher<ImageDatasetItem, ClassificationBatch<B>> for Classific
 
         let images = items
             .into_iter()
+            // TODO: adjust 32x32 to correctness?
             .map(|item| TensorData::new(image_as_vec_u8(item), Shape::new([32, 32, 3])))
             .map(|data| {
                 Tensor::<B, 3>::from_data(data.convert::<B::FloatElem>(), &self.device)
