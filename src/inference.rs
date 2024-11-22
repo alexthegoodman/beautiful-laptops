@@ -3,7 +3,7 @@ const NUM_CLASSES: u8 = 2;
 use burn::{
     module::Module,
     record::{CompactRecorder, Recorder},
-    tensor::{backend::Backend, Shape, Tensor, TensorData},
+    tensor::{activation::softmax, backend::Backend, Shape, Tensor, TensorData},
 };
 use image::io::Reader as ImageReader;
 use std::path::Path;
@@ -16,6 +16,8 @@ pub fn infer_from_file<B: Backend>(artifact_dir: &str, device: &B::Device, image
         .load(format!("{artifact_dir}/model").into(), device)
         .expect("Trained model should exist");
 
+    println!("Model loaded...");
+
     let model: LaptopClassifier<B> =
         LaptopClassifier::new(NUM_CLASSES.into(), device).load_record(record);
 
@@ -24,7 +26,7 @@ pub fn infer_from_file<B: Backend>(artifact_dir: &str, device: &B::Device, image
         .expect("Couldn't open image path")
         .decode()
         .expect("Couldn't decode image")
-        .resize_exact(800, 800, image::imageops::FilterType::Lanczos3);
+        .resize_exact(224, 224, image::imageops::FilterType::Lanczos3);
 
     // Convert to RGB if not already
     let img_rgb = img.to_rgb8();
@@ -35,7 +37,7 @@ pub fn infer_from_file<B: Backend>(artifact_dir: &str, device: &B::Device, image
         .flat_map(|p| [p[0] as f32, p[1] as f32, p[2] as f32])
         .collect();
 
-    let new_tensor = TensorData::new(tensor_data, Shape::new([32, 32, 3]));
+    let new_tensor = TensorData::new(tensor_data, Shape::new([224, 224, 3]));
 
     let new_data = Tensor::<B, 3>::from_data(new_tensor.convert::<B::FloatElem>(), &device)
         // permute(2, 0, 1)
@@ -54,9 +56,28 @@ pub fn infer_from_file<B: Backend>(artifact_dir: &str, device: &B::Device, image
 
     // Run inference
     let output = model.forward(images);
-    let predicted = output.argmax(1).flatten::<1>(0, 1).into_scalar();
+    let output_data = output.to_data();
 
+    // Convert bytes to f32 values
+    let values: Vec<f32> = output_data
+        .bytes
+        .chunks(4) // f32 is 4 bytes
+        .map(|bytes| {
+            let arr = [bytes[0], bytes[1], bytes[2], bytes[3]];
+            f32::from_le_bytes(arr)
+        })
+        .collect();
+
+    println!("Raw output logits: {:?}", values);
+
+    // If you want to see them paired (for 2 classes)
+    let predictions: Vec<_> = values.chunks(2).map(|chunk| (chunk[0], chunk[1])).collect();
+    println!("Predictions (class0, class1): {:?}", predictions);
+
+    // Rest of your code...
+    let predicted = output.argmax(1).flatten::<1>(0, 1).into_scalar();
     println!("Predicted class: {}", predicted);
+
     // Ok(predicted)
 }
 

@@ -135,6 +135,7 @@ impl<B: Backend> LaptopClassifier<B> {
         let output = self.forward(images);
 
         let loss = CrossEntropyLossConfig::new()
+            .with_weights(Some(Vec::from([1.0, 3.0])))
             .init(&output.device())
             .forward(output.clone(), targets.clone());
 
@@ -194,7 +195,7 @@ pub struct TrainingConfig {
     pub optimizer: SgdConfig,
     #[config(default = 30)]
     pub num_epochs: usize,
-    #[config(default = 128)]
+    #[config(default = 16)] // 128?
     pub batch_size: usize,
     #[config(default = 4)]
     pub num_workers: usize,
@@ -237,8 +238,8 @@ pub fn train<B: AutodiffBackend>(config: TrainingConfig, device: B::Device) {
 
     // Learner config
     let learner = LearnerBuilder::new(ARTIFACT_DIR)
-        // .metric_train_numeric(AccuracyMetric::new())
-        // .metric_valid_numeric(AccuracyMetric::new())
+        .metric_train_numeric(AccuracyMetric::new())
+        .metric_valid_numeric(AccuracyMetric::new())
         .metric_train_numeric(LossMetric::new())
         .metric_valid_numeric(LossMetric::new())
         .with_file_checkpointer(CompactRecorder::new())

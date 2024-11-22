@@ -170,8 +170,7 @@ impl<B: Backend> Batcher<ImageDatasetItem, ClassificationBatch<B>> for Classific
 
         let images = items
             .into_iter()
-            // TODO: adjust 32x32 to correctness?
-            .map(|item| TensorData::new(image_as_vec_u8(item), Shape::new([32, 32, 3])))
+            .map(|item| TensorData::new(image_as_vec_u8(item), Shape::new([224, 224, 3])))
             .map(|data| {
                 Tensor::<B, 3>::from_data(data.convert::<B::FloatElem>(), &self.device)
                     // permute(2, 0, 1)
@@ -186,6 +185,124 @@ impl<B: Backend> Batcher<ImageDatasetItem, ClassificationBatch<B>> for Classific
 
         let images = self.normalizer.normalize(images);
 
+        // println!("batch dims {:?}", images.dims());
+
         ClassificationBatch { images, targets }
     }
 }
+
+// impl<B: Backend> Batcher<ImageDatasetItem, ClassificationBatch<B>> for ClassificationBatcher<B> {
+//     fn batch(&self, items: Vec<ImageDatasetItem>) -> ClassificationBatch<B> {
+//         fn image_as_vec_u8(item: ImageDatasetItem) -> Vec<u8> {
+//             // Convert Vec<PixelDepth> to Vec<u8> (we know that CIFAR images are u8)
+//             item.image
+//                 .into_iter()
+//                 .map(|p: PixelDepth| -> u8 { p.try_into().unwrap() })
+//                 .collect::<Vec<u8>>()
+//         }
+
+//         // Print a sample of original pixel values from first image
+//         if let Some(first_item) = items.first() {
+//             println!("Original first few pixels: {:?}", &first_item.image[..10]);
+//             println!("Annotation: {:?}", first_item.annotation);
+//         }
+
+//         let targets = items
+//             .iter()
+//             .map(|item| {
+//                 if let Annotation::Label(y) = item.annotation {
+//                     println!("Target label: {}", y); // Log each target
+//                     Tensor::<B, 1, Int>::from_data(
+//                         TensorData::new(vec![y as i32], Shape::new([1])),
+//                         &self.device,
+//                     )
+//                 } else {
+//                     panic!("Invalid target type")
+//                 }
+//             })
+//             .collect();
+
+//         let images = items
+//             .into_iter()
+//             .enumerate() // Add enumerate to track image index
+//             .map(|(i, item)| {
+//                 let vec_u8 = image_as_vec_u8(item);
+//                 if i == 0 {
+//                     println!("After u8 conversion (first few): {:?}", &vec_u8[..10]);
+//                 }
+
+//                 let data = TensorData::new(vec_u8, Shape::new([800, 800, 3]));
+//                 let tensor =
+//                     Tensor::<B, 3>::from_data(data.convert::<B::FloatElem>(), &self.device);
+
+//                 if i == 0 {
+//                     // Log tensor data after conversion to float
+//                     let tensor_data = tensor.to_data();
+//                     let values: Vec<f32> = tensor_data
+//                         .bytes
+//                         .chunks(4)
+//                         .take(10) // First few values
+//                         .map(|bytes| {
+//                             let arr = [bytes[0], bytes[1], bytes[2], bytes[3]];
+//                             f32::from_le_bytes(arr)
+//                         })
+//                         .collect();
+//                     println!("After float conversion (first few): {:?}", values);
+//                 }
+
+//                 let permuted = tensor.swap_dims(2, 1).swap_dims(1, 0);
+
+//                 let normalized = permuted / 255.0;
+
+//                 if i == 0 {
+//                     // Log after normalization
+//                     let norm_data = normalized.to_data();
+//                     let norm_values: Vec<f32> = norm_data
+//                         .bytes
+//                         .chunks(4)
+//                         .take(10)
+//                         .map(|bytes| {
+//                             let arr = [bytes[0], bytes[1], bytes[2], bytes[3]];
+//                             f32::from_le_bytes(arr)
+//                         })
+//                         .collect();
+//                     println!("After [0,1] normalization (first few): {:?}", norm_values);
+//                 }
+
+//                 normalized
+//             })
+//             .collect();
+
+//         let images: Tensor<B, 4> = Tensor::stack(images, 0);
+
+//         // Log final normalized batch
+//         let batch_data = images.to_data();
+//         let batch_values: Vec<f32> = batch_data
+//             .bytes
+//             .chunks(4)
+//             .take(20) // First few values from batch
+//             .map(|bytes| {
+//                 let arr = [bytes[0], bytes[1], bytes[2], bytes[3]];
+//                 f32::from_le_bytes(arr)
+//             })
+//             .collect();
+//         println!("Final batch values (first few): {:?}", batch_values);
+
+//         // Log after final normalization
+//         let images = self.normalizer.normalize(images);
+//         let final_data = images.to_data();
+//         let final_values: Vec<f32> = final_data
+//             .bytes
+//             .chunks(4)
+//             .take(20)
+//             .map(|bytes| {
+//                 let arr = [bytes[0], bytes[1], bytes[2], bytes[3]];
+//                 f32::from_le_bytes(arr)
+//             })
+//             .collect();
+//         println!("After final normalization: {:?}", final_values);
+
+//         let targets = Tensor::cat(targets, 0);
+//         ClassificationBatch { images, targets }
+//     }
+// }
