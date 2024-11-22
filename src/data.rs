@@ -59,42 +59,65 @@ pub struct Normalizer<B: Backend> {
 //     }
 // }
 
-use image::GenericImageView;
-const TARGET_SIZE: (u32, u32) = (800, 800);
+// use image::GenericImageView;
+// const TARGET_SIZE: (u32, u32) = (800, 800);
+
+// impl<B: Backend> Normalizer<B> {
+//     /// Creates a new normalizer by computing statistics from the dataset tensor
+//     pub fn from_dataset(images: &Tensor<B, 4>, device: &Device<B>) -> Self {
+//         let dims = images.dims();
+//         let n_images = dims[0] as f32;
+//         let n_pixels = (dims[2] * dims[3]) as f32;
+
+//         // Calculate mean per channel
+//         let means = images
+//             .clone()
+//             .sum_dim(0) // Sum over batch
+//             .sum_dim(1) // Sum over height
+//             .sum_dim(1) // Sum over width
+//             .clone()
+//             / (n_images * n_pixels);
+
+//         // Calculate squared values and their mean
+//         let squared = images.clone() * images.clone();
+//         let squared_means =
+//             squared.sum_dim(0).sum_dim(1).sum_dim(1).clone() / (n_images * n_pixels);
+
+//         // Calculate std: sqrt(E[X²] - E[X]²)
+//         let variances = squared_means - (means.clone() * means.clone());
+//         let stds = variances.sqrt();
+
+//         // Reshape to [1, C, 1, 1] for broadcasting
+//         let mean = means.reshape([1, 3, 1, 1]);
+//         let std = stds.reshape([1, 3, 1, 1]);
+
+//         Self { mean, std }
+//     }
+
+//     /// Normalizes the input image tensor
+//     pub fn normalize(&self, input: Tensor<B, 4>) -> Tensor<B, 4> {
+//         (input - self.mean.clone()) / self.std.clone()
+//     }
+// }
+
+const MEAN: [f32; 3] = [0.618738, 0.61940384, 0.6039725];
+const STD: [f32; 3] = [0.36482072, 0.3620487, 0.36871767];
 
 impl<B: Backend> Normalizer<B> {
-    /// Creates a new normalizer by computing statistics from the dataset tensor
-    pub fn from_dataset(images: &Tensor<B, 4>, device: &Device<B>) -> Self {
-        let dims = images.dims();
-        let n_images = dims[0] as f32;
-        let n_pixels = (dims[2] * dims[3]) as f32;
-
-        // Calculate mean per channel
-        let means = images
-            .clone()
-            .sum_dim(0) // Sum over batch
-            .sum_dim(1) // Sum over height
-            .sum_dim(1) // Sum over width
-            .clone()
-            / (n_images * n_pixels);
-
-        // Calculate squared values and their mean
-        let squared = images.clone() * images.clone();
-        let squared_means =
-            squared.sum_dim(0).sum_dim(1).sum_dim(1).clone() / (n_images * n_pixels);
-
-        // Calculate std: sqrt(E[X²] - E[X]²)
-        let variances = squared_means - (means.clone() * means.clone());
-        let stds = variances.sqrt();
-
-        // Reshape to [1, C, 1, 1] for broadcasting
-        let mean = means.reshape([1, 3, 1, 1]);
-        let std = stds.reshape([1, 3, 1, 1]);
-
+    /// Creates a new normalizer.
+    pub fn new(device: &Device<B>) -> Self {
+        let mean = Tensor::<B, 1>::from_floats(MEAN, device).reshape([1, 3, 1, 1]);
+        let std = Tensor::<B, 1>::from_floats(STD, device).reshape([1, 3, 1, 1]);
         Self { mean, std }
     }
 
-    /// Normalizes the input image tensor
+    /// Normalizes the input image according to the CIFAR-10 dataset.
+    ///
+    /// The input image should be in the range [0, 1].
+    /// The output image will be in the range [-1, 1].
+    ///
+    /// The normalization is done according to the following formula:
+    /// `input = (input - mean) / std`
     pub fn normalize(&self, input: Tensor<B, 4>) -> Tensor<B, 4> {
         (input - self.mean.clone()) / self.std.clone()
     }
@@ -102,7 +125,7 @@ impl<B: Backend> Normalizer<B> {
 
 #[derive(Clone)]
 pub struct ClassificationBatcher<B: Backend> {
-    // normalizer: Normalizer<B>,
+    normalizer: Normalizer<B>,
     device: B::Device,
 }
 
@@ -115,7 +138,7 @@ pub struct ClassificationBatch<B: Backend> {
 impl<B: Backend> ClassificationBatcher<B> {
     pub fn new(device: B::Device) -> Self {
         Self {
-            // normalizer: Normalizer::<B>::new(&device),
+            normalizer: Normalizer::<B>::new(&device),
             device,
         }
     }
@@ -161,8 +184,7 @@ impl<B: Backend> Batcher<ImageDatasetItem, ClassificationBatch<B>> for Classific
         let images: Tensor<B, 4> = Tensor::stack(images, 0);
         let targets = Tensor::cat(targets, 0);
 
-        let normalizer = Normalizer::from_dataset(&images, &self.device);
-        let images = normalizer.normalize(images);
+        let images = self.normalizer.normalize(images);
 
         ClassificationBatch { images, targets }
     }

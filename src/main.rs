@@ -22,13 +22,13 @@ pub fn run() {
 }
 
 fn main() {
-    println!("Intializing...");
-    run();
-    // println!("Infering...");
-    // let device = WgpuDevice::default();
-    // infer_from_file::<Wgpu>(
-    //     "/tmp/custom-image-dataset",
-    //     &device,
-    //     "laptop_dataset_normal/val/laptop_1780.jpg",
-    // );
+    // println!("Intializing...");
+    // run();
+    println!("Infering...");
+    let device = WgpuDevice::default();
+    infer_from_file::<Wgpu>(
+        "/tmp/custom-image-dataset",
+        &device,
+        "laptop_dataset_normal/val/laptop_1780.jpg",
+    );
 }

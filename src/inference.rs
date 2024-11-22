@@ -49,7 +49,7 @@ pub fn infer_from_file<B: Backend>(artifact_dir: &str, device: &B::Device, image
 
     let images: Tensor<B, 4> = Tensor::stack(images, 0);
 
-    let normalizer = Normalizer::from_dataset(&images, &device);
+    let normalizer = Normalizer::new(device);
     let images = normalizer.normalize(images);
 
     // Run inference
